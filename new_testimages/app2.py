@@ -36,15 +36,15 @@ def process_image(image_path):
     cA3, (cH3, cV3, cD3), (cH2, cV2, cD2), (cH1, cV1, cD1) = coeffs
 
     # Adaptive thresholding with lower threshold factor
-    threshold_factor = 0.2  # Reduced to preserve more edge information
+    threshold_factor = 0.9  # Reduced to preserve more edge information
     threshold_cD1 = pywt.threshold(cD1, threshold_factor*np.std(cD1), mode='soft', substitute=np.median(cD1))
     threshold_cD2 = pywt.threshold(cD2, threshold_factor*np.std(cD2), mode='soft', substitute=np.median(cD2))
     threshold_cD3 = pywt.threshold(cD3, threshold_factor*np.std(cD3), mode='soft', substitute=np.median(cD3))
 
     # Multi-scale edge enhancement
     edge_boost_level1 = 100  # Strong boost for finest details
-    edge_boost_level2 = 1  # Moderate boost for mid-level details
-    edge_boost_level3 = 1  # Mild boost for coarse details
+    edge_boost_level2 = 2 # Moderate boost for mid-level details
+    edge_boost_level3 = 1 # Mild boost for coarse details
     
     coeffs_enhanced = [
         cA3,
