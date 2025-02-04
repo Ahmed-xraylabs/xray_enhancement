@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Live TIFF Image Processor</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+    }
+    .container {
+      display: flex;
+      height: 100vh;
+    }
+    .left-panel {
+      width: 300px;
+      padding: 20px;
+      border-right: 1px solid #ccc;
+      box-sizing: border-box;
+    }
+    .right-panel {
+      flex: 1;
+      padding: 20px;
+      overflow: auto;
+      background: #f9f9f9;
+    }
+    .slider-group {
+      margin-bottom: 20px;
+    }
+    .slider-group label {
+      display: block;
+      margin-bottom: 5px;
+    }
+    #imageContainer img {
+      max-width: 100%;
+      height: auto;
+      /* The image itself will scale; the container will handle scrolling if needed */
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="left-panel">
+      <h2>Controls</h2>
+      <!-- Upload Section -->
+      <div>
+        <input type="file" id="fileInput" accept=".tif,.tiff">
+        <button onclick="uploadImage()">Upload Image</button>
+      </div>
+      <br>
+      <!-- Slider Controls -->
+      <div class="slider-group">
+        <label for="tile_grid">Tile Grid Size: <output id="tile_grid_output">20</output></label>
+        <input type="range" id="tile_grid" name="tile_grid" min="1" max="80" value="20"
+               oninput="tile_grid_output.value = tile_grid.value; updateImage();">
+      </div>
+      <div class="slider-group">
+        <label for="clip_limit">Clip Limit: <output id="clip_limit_output">3</output></label>
+        <input type="range" id="clip_limit" name="clip_limit" min="1" max="100" step="0.1" value="3"
+               oninput="clip_limit_output.value = clip_limit.value; updateImage();">
+      </div>
+      <div class="slider-group">
+        <label for="gamma">Gamma Correction: <output id="gamma_output">0.5</output></label>
+        <input type="range" id="gamma" name="gamma" min="0.1" max="1" step="0.1" value="0.5"
+               oninput="gamma_output.value = gamma.value; updateImage();">
+      </div>
+      <div class="slider-group">
+        <label for="alpha">Alpha (Edge Enhancement): <output id="alpha_output">4</output></label>
+        <input type="range" id="alpha" name="alpha" min="0" max="30" step="0.1" value="4"
+               oninput="alpha_output.value = alpha.value; updateImage();">
+      </div>
+      <!-- Hidden field to store the current file id -->
+      <input type="hidden" id="file_id" value="">
+    </div>
+    <div class="right-panel">
+      <h2>Result Image</h2>
+      <div id="imageContainer">
+        <p>No image uploaded yet.</p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Update the processed image when slider values change.
+    function updateImage() {
+      var file_id = document.getElementById("file_id").value;
+      if (!file_id) {
+        return; // No image uploaded yet.
+      }
+      var tile_grid = document.getElementById("tile_grid").value;
+      var clip_limit = document.getElementById("clip_limit").value;
+      var gamma = document.getElementById("gamma").value;
+      var alpha = document.getElementById("alpha").value;
+      
+      var formData = new FormData();
+      formData.append("tile_grid", tile_grid);
+      formData.append("clip_limit", clip_limit);
+      formData.append("gamma", gamma);
+      formData.append("alpha", alpha);
+      formData.append("file_id", file_id);
+      
+      fetch("/update", {
+        method: "POST",
+        body: formData
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.image) {
+          document.getElementById("imageContainer").innerHTML = 
+            '<img id="resultImage" src="data:image/png;base64,' + data.image + '" alt="Processed Image">';
+        } else {
+          console.error("Error:", data.error);
+        }
+      })
+      .catch(error => console.error("Error:", error));
+    }
+
+    // Upload a new image using AJAX.
+    function uploadImage() {
+      var fileInput = document.getElementById("fileInput");
+      if (fileInput.files.length === 0) {
+        alert("Please select a TIFF image to upload.");
+        return;
+      }
+      
+      var file = fileInput.files[0];
+      var formData = new FormData();
+      formData.append("file", file);
+      // Include current slider values as defaults.
+      formData.append("tile_grid", document.getElementById("tile_grid").value);
+      formData.append("clip_limit", document.getElementById("clip_limit").value);
+      formData.append("gamma", document.getElementById("gamma").value);
+      formData.append("alpha", document.getElementById("alpha").value);
+      
+      fetch("/upload_image", {
+        method: "POST",
+        body: formData
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.image && data.file_id) {
+          document.getElementById("file_id").value = data.file_id;
+          document.getElementById("imageContainer").innerHTML = 
+            '<img id="resultImage" src="data:image/png;base64,' + data.image + '" alt="Processed Image">';
+        } else {
+          alert("Upload failed: " + (data.error || "Unknown error"));
+        }
+      })
+      .catch(error => {
+        console.error("Error:", error);
+        alert("An error occurred during image upload.");
+      });
+    }
+  </script>
+</body>
+</html>
