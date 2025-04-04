@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>X-Ray Image Enhancer</title>
+    <style>
+        body { font-family: sans-serif; display: flex; padding: 20px; }
+        .controls { width: 350px; padding-right: 20px; border-right: 1px solid #ccc; }
+        .image-display { flex-grow: 1; padding-left: 20px; text-align: center; }
+        img { max-width: 100%; max-height: 80vh; border: 1px solid #eee; }
+        label { display: block; margin-top: 10px; font-weight: bold; }
+        input[type=range] { width: 100%; }
+        .control-group { border: 1px solid #eee; padding: 10px; margin-bottom: 15px; border-radius: 5px; }
+        .control-group h4 { margin-top: 0; border-bottom: 1px solid #eee; padding-bottom: 5px; }
+        .value-display { font-weight: normal; color: #555; margin-left: 10px; }
+        #status { margin-top: 15px; color: red; font-weight: bold; }
+        select { width: 100%; padding: 5px; margin-top: 5px;}
+        /* Initially disable controls */
+        .controls fieldset { border: none; padding: 0; margin: 0;}
+        .controls fieldset:disabled { opacity: 0.6; pointer-events: none; }
+    </style>
+</head>
+<body>
+<div class="controls">
+    <h2>Controls</h2>
+    <div class="control-group">
+        <h4>Upload Image</h4>
+        <label for="fileInput">Select TIFF Image:</label>
+        <input type="file" id="fileInput" accept=".tif,.tiff" onchange="uploadImage()">
+    </div>
+    <fieldset id="parameterControls" disabled>
+        <div class="control-group">
+            <h4>Enhancement</h4>
+            <label for="tile_grid">CLAHE Tile Grid: <span class="value-display" id="tile_grid_val">20</span></label>
+            <input type="range" id="tile_grid" name="tile_grid" min="2" max="120" value="10" oninput="updateValueDisplay('tile_grid'); updateImage();">
+            <label for="clip_limit">CLAHE Clip Limit: <span class="value-display" id="clip_limit_val">3.0</span></label>
+            <input type="range" id="clip_limit" name="clip_limit" min="0.1" max="50" step="0.1" value="3" oninput="updateValueDisplay('clip_limit'); updateImage();">
+            <label for="gamma">Gamma: <span class="value-display" id="gamma_val">0.5</span></label>
+            <input type="range" id="gamma" name="gamma" min="0.1" max="5.0" step="0.05" value="0.5" oninput="updateValueDisplay('gamma'); updateImage();">
+            <label for="alpha">DoG Alpha (Sharpening): <span class="value-display" id="alpha_val">4.0</span></label>
+            <input type="range" id="alpha" name="alpha" min="0" max="100" step="0.1" value="4" oninput="updateValueDisplay('alpha'); updateImage();">
+        </div>
+        <div class="control-group">
+            <h4>Denoising: Median Filter</h4>
+            <label>
+                <input type="checkbox" id="use_median" name="use_median" onchange="updateImage()"> Use Median Filter
+            </label>
+            <label for="median_kernel">Kernel Size: <span class="value-display" id="median_kernel_val">5</span> (will be odd)</label>
+            <input type="range" id="median_kernel" name="median_kernel" min="1" max="5" step="1" value="1" oninput="updateValueDisplay('median_kernel'); updateImage();">
+        </div>
+    </fieldset>
+    <div id="status"></div>
+</div>
+<div class="image-display">
+    <h2>Processed Image</h2>
+    <img id="processedImage" src="#" alt="Processed image will appear here">
+</div>
+<script>
+    let currentFileId = null;
+    const parameterControls = document.getElementById('parameterControls');
+    const statusDiv = document.getElementById('status');
+    const imageElement = document.getElementById('processedImage');
+
+    function updateValueDisplay(elementId) {
+        const inputElement = document.getElementById(elementId);
+        const displayElement = document.getElementById(elementId + '_val');
+        if (inputElement && displayElement) {
+            displayElement.textContent = inputElement.value;
+        }
+    }
+
+    function initializeValueDisplays() {
+        const inputs = document.querySelectorAll('.controls input[type=range]');
+        inputs.forEach(input => updateValueDisplay(input.id));
+    }
+
+    function gatherParameters() {
+        const formData = new FormData();
+        formData.append('tile_grid', document.getElementById('tile_grid').value);
+        formData.append('clip_limit', document.getElementById('clip_limit').value);
+        formData.append('gamma', document.getElementById('gamma').value);
+        formData.append('alpha', document.getElementById('alpha').value);
+        formData.append('use_median', document.getElementById('use_median').checked ? 'on' : 'off');
+        formData.append('median_kernel', document.getElementById('median_kernel').value);
+        return formData;
+    }
+
+    async function uploadImage() {
+        const fileInput = document.getElementById('fileInput');
+        if (!fileInput.files || fileInput.files.length === 0) {
+            statusDiv.textContent = 'Please select a file first.';
+            return;
+        }
+        const file = fileInput.files[0];
+        if (!file.type.match('image/tiff')) {
+            statusDiv.textContent = 'Please select a TIFF file (.tif, .tiff).';
+            return;
+        }
+        const formData = gatherParameters();
+        formData.append('file', file);
+        statusDiv.textContent = 'Uploading and processing...';
+        imageElement.src = "#";
+        parameterControls.disabled = true;
+
+        try {
+            const response = await fetch('/upload_image', {
+                method: 'POST',
+                body: formData
+            });
+            const result = await response.json();
+            if (response.ok) {
+                statusDiv.textContent = 'Image processed successfully.';
+                imageElement.src = 'data:image/png;base64,' + result.image;
+                currentFileId = result.file_id;
+                document.getElementById('tile_grid').value = result.tile_grid; updateValueDisplay('tile_grid');
+                document.getElementById('clip_limit').value = result.clip_limit; updateValueDisplay('clip_limit');
+                document.getElementById('gamma').value = result.gamma; updateValueDisplay('gamma');
+                document.getElementById('alpha').value = result.alpha; updateValueDisplay('alpha');
+                document.getElementById('use_median').checked = result.use_median;
+                document.getElementById('median_kernel').value = result.median_kernel; updateValueDisplay('median_kernel');
+                parameterControls.disabled = false;
+            } else {
+                statusDiv.textContent = 'Error: ' + (result.error || 'Unknown error');
+                currentFileId = null;
+                parameterControls.disabled = true;
+            }
+        } catch (error) {
+            statusDiv.textContent = 'Network or server error: ' + error;
+            currentFileId = null;
+            parameterControls.disabled = true;
+        }
+    }
+
+    let updateTimeout;
+    async function updateImage() {
+        clearTimeout(updateTimeout);
+        updateTimeout = setTimeout(async () => {
+            if (!currentFileId) return;
+            const formData = gatherParameters();
+            formData.append('file_id', currentFileId);
+            statusDiv.textContent = 'Updating image...';
+            imageElement.style.opacity = 0.7;
+
+            try {
+                const response = await fetch('/update', {
+                    method: 'POST',
+                    body: formData
+                });
+                const result = await response.json();
+                if (response.ok) {
+                    statusDiv.textContent = 'Update successful.';
+                    imageElement.src = 'data:image/png;base64,' + result.image;
+                } else {
+                    statusDiv.textContent = 'Update Error: ' + (result.error || 'Unknown error');
+                }
+            } catch (error) {
+                statusDiv.textContent = 'Network or server error during update: ' + error;
+            } finally {
+                imageElement.style.opacity = 1.0;
+            }
+        }, 300);
+    }
+
+    window.onload = initializeValueDisplays;
+</script>
+</body>
+</html>
